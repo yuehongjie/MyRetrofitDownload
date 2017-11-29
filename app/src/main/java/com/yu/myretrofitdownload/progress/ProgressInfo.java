@@ -1,4 +1,4 @@
-package com.yu.myretrofitdownload.download;
+package com.yu.myretrofitdownload.progress;
 
 import android.os.Parcel;
 import android.os.Parcelable;

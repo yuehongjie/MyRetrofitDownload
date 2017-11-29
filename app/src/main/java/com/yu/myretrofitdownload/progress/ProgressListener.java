@@ -1,4 +1,4 @@
-package com.yu.myretrofitdownload.download;
+package com.yu.myretrofitdownload.progress;
 
 /**
  * Created by Administrator on 2017-11-28.

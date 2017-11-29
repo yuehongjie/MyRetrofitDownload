@@ -1,4 +1,4 @@
-package com.yu.myretrofitdownload.download;
+package com.yu.myretrofitdownload.progress;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
@@ -68,6 +69,17 @@ public class ProgressManager {
     }
 
     /**
+     * 将 {@link okhttp3.OkHttpClient.Builder} 传入,配置一些本管理器需要的参数
+     *
+     * @param builder 需要添加拦截器的 {@link okhttp3.OkHttpClient.Builder}
+     * @return 添加进度拦截器的{@link okhttp3.OkHttpClient.Builder}
+     */
+    public OkHttpClient.Builder with(OkHttpClient.Builder builder) {
+        return builder
+                .addNetworkInterceptor(mProgressIntercept);
+    }
+
+    /**
      * 从拦截的 Response 中取出请求的链接，检查该链接是否设置了下载进度监听器，
      * 如果是，则创建新的 ResponseBody ，进行下载进度的回调
      *
@@ -85,7 +97,7 @@ public class ProgressManager {
         String key = response.request().url().toString();
 
         //判断链接是否被重定向了 ,是的话需要把原链接的监听器，设置给重定向后的链接
-        if (haveRedirect(response)) {
+        if (response.isRedirect()) {
             resolveRedirect(mRequestListeners, response, key);
             resolveRedirect(mResponseListeners, response, key);
         }
@@ -131,22 +143,6 @@ public class ProgressManager {
 
 
     /**
-     * 链接是否重定向了，是的话，需要把原链接的监听器，设置给重定向后的链接
-     *
-     * @param response 原始的 {@link Response}
-     * @return 是否重定向了
-     */
-    private boolean haveRedirect(Response response) {
-        String status = String.valueOf(response.code());
-        if (TextUtils.isEmpty(status))
-            return false;
-        if (status.contains("301") || status.contains("302") || status.contains("303") || status.contains("307")) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * 处理重定向地址的监听
      * @param mapListeners 监听器
      * @param response 原始的 {@link Response}
@@ -187,6 +183,8 @@ public class ProgressManager {
      * @param listener 当此 {@code url} 地址存在上传的动作时,此监听器将被调用
      */
     public void addRequestListener(String url, ProgressListener listener) {
+        if (TextUtils.isEmpty(url) || listener == null) return;
+
         List<ProgressListener> uploadProgressListeners;
         synchronized (ProgressManager.class) {
             uploadProgressListeners = mRequestListeners.get(url);
@@ -205,6 +203,8 @@ public class ProgressManager {
      * @param listener 当此 {@code url} 地址存在下载的动作时,此监听器将被调用
      */
     public void addResponseListener(String url, ProgressListener listener) {
+        if (TextUtils.isEmpty(url) || listener == null) return;
+
         List<ProgressListener> progressListeners;
         synchronized (ProgressManager.class) {
             progressListeners = mResponseListeners.get(url);
@@ -218,15 +218,50 @@ public class ProgressManager {
 
 
     /**
+     * 删除某个上传进度监听
+     * @param url url 为了更快的匹配要删除的 listener
+     * @param listener 要删除的 listener
+     */
+    public void removeRequestListener(String url, ProgressListener listener) {
+        if (TextUtils.isEmpty(url) || listener == null) return;
+
+        List<ProgressListener> progressListeners;
+        synchronized (ProgressManager.class) {
+            progressListeners = mRequestListeners.get(url);
+            if (progressListeners != null && progressListeners.contains(listener)) {
+                progressListeners.remove(listener);
+            }
+        }
+    }
+
+    /**
+     * 删除某个下载进度监听
+     * @param url url 为了更快的匹配要删除的 listener
+     * @param listener 要删除的 listener
+     */
+    public void removeResponseListener(String url, ProgressListener listener) {
+        if (TextUtils.isEmpty(url) || listener == null) return;
+
+        List<ProgressListener> progressListeners;
+        synchronized (ProgressManager.class) {
+            progressListeners = mResponseListeners.get(url);
+            if (progressListeners != null && progressListeners.contains(listener)) {
+                progressListeners.remove(listener);
+            }
+        }
+    }
+
+
+    /**
      * 当在 {@link ProgressRequestBody} 和 {@link ProgressResponseBody} 内部处理二进制流时发生错误
      * 会主动调用 {@link ProgressListener#onError(long, Exception)},但是有些错误并不是在它们内部发生的
-     * 但同样会引起网络请求的失败,所以向外面提供{@link ProgressManager#notifyOnErorr},当外部发生错误时
+     * 但同样会引起网络请求的失败,所以向外面提供{@link ProgressManager#notifyOnError},当外部发生错误时
      * 手动调用此方法,以通知所有的监听器
      *
      * @param url {@code url} 作为标识符
      * @param e   错误
      */
-    public void notifyOnErorr(String url, Exception e) {
+    public void notifyOnError(String url, Exception e) {
         forEachListenersOnError(mRequestListeners, url, e);
         forEachListenersOnError(mResponseListeners, url, e);
     }
